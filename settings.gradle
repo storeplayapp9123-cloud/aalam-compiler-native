@@ -1,0 +1,2 @@
+rootProject.name = "aalam-compiler-native"
+include ':app'
