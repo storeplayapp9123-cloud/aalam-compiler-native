@@ -11,12 +11,13 @@ using aalam::runPipeline;
 
 namespace {
 
-// Steps ek baar banaye jaate hain aur process ke jeete-ji zinda rehte hain,
-// taaki aalam_step_name() ke diye hue const char* pointers hamesha valid rahein.
 const std::vector<BuildStep> &steps() {
     static std::vector<BuildStep> s = defaultSteps();
     return s;
 }
+
+AalamJavaCompileHook g_javaHook = nullptr;
+void *g_javaHookData = nullptr;
 
 } // namespace
 
@@ -30,6 +31,11 @@ extern "C" const char *aalam_step_name(int index) {
     return s[index].name.c_str();
 }
 
+extern "C" void aalam_set_java_compile_hook(AalamJavaCompileHook hook, void *userdata) {
+    g_javaHook = hook;
+    g_javaHookData = userdata;
+}
+
 extern "C" void aalam_run_build(const char *projectDir,
                                  const char *outDir,
                                  const char *androidJar,
@@ -41,6 +47,16 @@ extern "C" void aalam_run_build(const char *projectDir,
     ctx.projectDir = projectDir ? projectDir : "";
     ctx.outDir = outDir ? outDir : "";
     ctx.androidJar = androidJar ? androidJar : "";
+
+    if (g_javaHook) {
+        AalamJavaCompileHook hook = g_javaHook;
+        void *hd = g_javaHookData;
+        ctx.javaCompile = [hook, hd](const std::string &s, const std::string &c,
+                                     const std::string &a) -> std::string {
+            const char *e = hook(s.c_str(), c.c_str(), a.c_str(), hd);
+            return e ? std::string(e) : std::string();
+        };
+    }
 
     BuildListener listener;
     if (onStepStart) {
