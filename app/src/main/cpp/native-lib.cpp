@@ -12,24 +12,29 @@ std::string jstr(JNIEnv *env, jstring s) {
     return result;
 }
 
-// aalam_run_build ko jo userdata milta hai, usi me JNIEnv* aur listener jobject
-// pack karke bhejte hain, taaki C callbacks wapas Java tak pahunch sakein.
 struct JniCallbackData {
     JNIEnv *env;
     jobject listener;
     jmethodID onStepStart;
     jmethodID onStepDone;
     jmethodID onFinished;
+    jclass bridgeClass;
+    jmethodID compileJava;
+    std::string javaError;
 };
 
 void stepStartThunk(int index, int total, const char *name, void *userdata) {
     auto *d = static_cast<JniCallbackData *>(userdata);
-    d->env->CallVoidMethod(d->listener, d->onStepStart, index, total, d->env->NewStringUTF(name));
+    jstring n = d->env->NewStringUTF(name);
+    d->env->CallVoidMethod(d->listener, d->onStepStart, index, total, n);
+    d->env->DeleteLocalRef(n);
 }
 
 void stepDoneThunk(int index, int total, const char *name, void *userdata) {
     auto *d = static_cast<JniCallbackData *>(userdata);
-    d->env->CallVoidMethod(d->listener, d->onStepDone, index, total, d->env->NewStringUTF(name));
+    jstring n = d->env->NewStringUTF(name);
+    d->env->CallVoidMethod(d->listener, d->onStepDone, index, total, n);
+    d->env->DeleteLocalRef(n);
 }
 
 void finishThunk(int success, const char *apkPath, const char *error, void *userdata) {
@@ -37,6 +42,29 @@ void finishThunk(int success, const char *apkPath, const char *error, void *user
     jstring apk = apkPath ? d->env->NewStringUTF(apkPath) : nullptr;
     jstring err = error ? d->env->NewStringUTF(error) : nullptr;
     d->env->CallVoidMethod(d->listener, d->onFinished, static_cast<jboolean>(success != 0), apk, err);
+}
+
+// Step 2: Java ka ECJ wala compileJava() bulata hai.
+const char *javaCompileThunk(const char *src, const char *classes, const char *jar, void *userdata) {
+    auto *d = static_cast<JniCallbackData *>(userdata);
+    JNIEnv *env = d->env;
+    jstring js = env->NewStringUTF(src);
+    jstring jc = env->NewStringUTF(classes);
+    jstring ja = env->NewStringUTF(jar);
+    jstring res = static_cast<jstring>(
+            env->CallStaticObjectMethod(d->bridgeClass, d->compileJava, js, jc, ja));
+    env->DeleteLocalRef(js);
+    env->DeleteLocalRef(jc);
+    env->DeleteLocalRef(ja);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        d->javaError = "Java exception aayi compileJava me";
+        return d->javaError.c_str();
+    }
+    if (res == nullptr) return nullptr;
+    d->javaError = jstr(env, res);
+    env->DeleteLocalRef(res);
+    return d->javaError.c_str();
 }
 
 } // namespace
@@ -53,7 +81,7 @@ Java_com_aalam_compiler_NativeBridge_stepNames(JNIEnv *env, jclass) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_aalam_compiler_NativeBridge_runBuild(JNIEnv *env, jclass,
+Java_com_aalam_compiler_NativeBridge_runBuild(JNIEnv *env, jclass clazz,
                                                jstring jProjectDir, jstring jOutDir,
                                                jstring jAndroidJar, jobject jListener) {
     std::string projectDir = jstr(env, jProjectDir);
@@ -67,10 +95,14 @@ Java_com_aalam_compiler_NativeBridge_runBuild(JNIEnv *env, jclass,
             env->GetMethodID(listenerClass, "onStepStart", "(IILjava/lang/String;)V"),
             env->GetMethodID(listenerClass, "onStepDone", "(IILjava/lang/String;)V"),
             env->GetMethodID(listenerClass, "onFinished", "(ZLjava/lang/String;Ljava/lang/String;)V"),
+            clazz,
+            env->GetStaticMethodID(clazz, "compileJava",
+                                   "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"),
+            std::string(),
     };
 
-    // JNI (C-style boundary) yahan sirf aalam_compiler.h ke C API ko bulata hai -
-    // C++ core (build_pipeline.h) ko kabhi seedha nahi chhoota.
+    aalam_set_java_compile_hook(javaCompileThunk, &data);
     aalam_run_build(projectDir.c_str(), outDir.c_str(), androidJar.c_str(),
                      stepStartThunk, stepDoneThunk, finishThunk, &data);
+    aalam_set_java_compile_hook(nullptr, nullptr);
 }
