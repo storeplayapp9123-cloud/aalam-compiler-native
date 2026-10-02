@@ -165,6 +165,18 @@ public class MainActivity extends Activity {
                 try (FileOutputStream out = new FileOutputStream(new File(project, "AndroidManifest.xml"))) {
                     out.write("<manifest package=\"com.sample.app\"/>".getBytes("UTF-8"));
                 }
+
+                String helloSrc = "package com.sample.app;\n\n"
+                        + "public class Hello {\n"
+                        + "    public static String greet() {\n"
+                        + "        return \"Hello from Aalam Compiler\";\n"
+                        + "    }\n"
+                        + "}\n";
+                try (FileOutputStream out = new FileOutputStream(
+                        new File(project, "src/com/sample/app/Hello.java"))) {
+                    out.write(helloSrc.getBytes("UTF-8"));
+                }
+
                 File outDir = new File(getFilesDir(), "out");
 
                 NativeBridge.runBuild(
