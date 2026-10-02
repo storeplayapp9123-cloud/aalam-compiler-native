@@ -28,14 +28,16 @@ public class NativeBridge {
 
     public static native void runBuild(String projectDir, String outDir, String androidJar, Listener listener);
 
-    /** Native se bulaya jata hai (Step 2). Success pe null, fail pe error text return karta hai. */
+    /** Native se bulaya jata hai (Step 2). Success pe null, fail pe error text. */
     public static String compileJava(String srcDir, String classesDir, String androidJar) {
         try {
             new File(classesDir).mkdirs();
             StringWriter sw = new StringWriter();
             PrintWriter pw = new PrintWriter(sw);
             boolean ok = BatchCompiler.compile(
-                    new String[]{"-1.8", "-nowarn", "-cp", androidJar, "-d", classesDir, srcDir},
+                    new String[]{"-1.8", "-nowarn", "-proc:none",
+                            "-bootclasspath", androidJar,
+                            "-d", classesDir, srcDir},
                     pw, pw, null);
             pw.flush();
             return ok ? null : sw.toString();
