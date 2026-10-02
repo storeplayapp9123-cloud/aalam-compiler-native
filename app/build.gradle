@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
 }
 
 android {
@@ -39,6 +40,10 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
 }
 
 // android.jar ko assets me copy karta hai (ECJ step ko chahiye)
@@ -56,6 +61,7 @@ tasks.named('preBuild') {
 }
 
 dependencies {
-    // ECJ: sirf is ek step (Java source compile) ke liye chahiye hoga, JNI callback se
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    // ECJ: sirf Java source compile step ke liye, JNI callback se
     implementation 'org.eclipse.jdt:ecj:3.26.0'
 }
