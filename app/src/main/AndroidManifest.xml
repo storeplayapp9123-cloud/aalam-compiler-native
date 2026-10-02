@@ -4,6 +4,7 @@
         android:label="Aalam Compiler"
         android:allowBackup="false"
         android:theme="@android:style/Theme.Material.NoActionBar">
+        android:largeHeap="true"
         <activity
             android:name=".MainActivity"
             android:exported="true"
